@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Driver Bus Unila - Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 20px; background: #0f172a; color: white; margin: 0; }
+        .card { background: #1e293b; padding: 30px; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #334155; margin-top: 20px; }
+        h2 { color: #facc15; margin-bottom: 5px; }
+        select, button { width: 100%; padding: 18px; margin: 12px 0; border-radius: 15px; border: none; font-size: 16px; font-weight: bold; }
+        select { background: #334155; color: white; outline: none; transition: 0.3s; }
+        select option:disabled { color: #ef4444 !important; background: #1e293b; }
+        #startBtn { background: #22c55e; color: white; box-shadow: 0 5px 0 #16a34a; }
+        #stopBtn { background: #ef4444; color: white; display: none; box-shadow: 0 5px 0 #b91c1c; }
+        .status { margin-top: 20px; padding: 15px; border-radius: 10px; background: rgba(255,255,255,0.05); color: #facc15; font-size: 14px; min-height: 20px; }
+        .info { font-size: 11px; color: #94a3b8; margin-top: 20px; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Panel Supir Unila</h2>
+        <p style="font-size: 13px; color: #94a3b8;">Sinergi Juang - Monitoring Sistem</p>
+        
+        <select id="busId">
+            <option value="bus_01">ARMADA 01</option>
+            <option value="bus_02">ARMADA 02</option>
+            <option value="bus_03">ARMADA 03</option>
+            <option value="bus_04">ARMADA 04</option>
+            <option value="bus_05">ARMADA 05</option>
+            <option value="bus_06">ARMADA 06</option>
+            <option value="bus_07">ARMADA 07</option>
+        </select>
+
+        <button id="startBtn">▶ MULAI JALAN</button>
+        <button id="stopBtn">■ SELESAI / OFF</button>
+
+        <div id="status" class="status">Menunggu GPS...</div>
+        
+        <div class="info">
+            <b>SISTEM OTOMATIS:</b><br>
+            - Armada bertanda <span style="color:#ef4444">SEDANG DIPAKAI</span> tidak bisa dipilih.<br>
+            - Layar boleh mati, GPS tetap aktif.<br>
+            - Pastikan izin lokasi Safari/Chrome set ke <b>"Selalu" (Always)</b>.
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set, remove, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCRhKpaJAuSH76woU88Ht1-0QrKDNSMYDc",
+            authDomain: "bus-unila.firebaseapp.com",
+            databaseURL: "https://bus-unila-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "bus-unila",
+            appId: "1:791999999257:web:3643fcbef541d4d283a988"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const noSleep = new NoSleep();
+        let watchId = null;
+
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDiv = document.getElementById('status');
+        const busSelect = document.getElementById('busId');
+
+        // --- CEK ARMADA YANG LAGI DIPAKAI SUPIR LAIN ---
+        onValue(ref(db, 'lokasi_bus'), (snapshot) => {
+            const data = snapshot.val();
+            const options = busSelect.querySelectorAll('option');
+            
+            options.forEach(opt => {
+                const busKey = opt.value;
+                if (data && data[busKey]) {
+                    opt.disabled = true;
+                    if (!opt.innerText.includes("(DIPAKAI)")) {
+                        opt.innerText += " (DIPAKAI)";
+                    }
+                } else {
+                    opt.disabled = false;
+                    opt.innerText = opt.innerText.replace(" (DIPAKAI)", "");
+                }
+            });
+        });
+
+        startBtn.onclick = () => {
+            noSleep.enable(); 
+            const id = busSelect.value;
+            const gpsOpt = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 };
+
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition((pos) => {
+                    const { latitude, longitude } = pos.coords;
+                    
+                    set(ref(db, 'lokasi_bus/' + id), {
+                        lat: latitude,
+                        lng: longitude,
+                        lastUpdate: new Date().getTime()
+                    });
+
+                    statusDiv.innerHTML = "🟢 GPS AKTIF - Bus 0" + id.split('_')[1] + " Terdeteksi";
+                    statusDiv.style.color = "#22c55e";
+                    startBtn.style.display = 'none';
+                    stopBtn.style.display = 'block';
+                    busSelect.disabled = true;
+                }, (err) => {
+                    alert("Gagal GPS! Cek Izin Lokasi.");
+                }, gpsOpt);
+            }
+        };
+
+        stopBtn.onclick = () => {
+            noSleep.disable();
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                remove(ref(db, 'lokasi_bus/' + busSelect.value));
+                location.reload(); 
+            }
+        };
+    </script>
+</body>
+</html>
