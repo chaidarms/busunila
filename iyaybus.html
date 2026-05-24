@@ -8,31 +8,50 @@
     <meta name="theme-color" content="#22c55e">
     <style>
         body { font-family: sans-serif; text-align: center; padding: 20px; background: #0f172a; color: white; }
-        .btn { padding: 20px 40px; font-size: 18px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer; width: 80%; margin: 10px 0; }
-        #btn-mulai { background: #22c55e; color: white; }
-        #btn-selesai { background: #ef4444; color: white; }
-        .info { background: #1e293b; padding: 15px; border-radius: 10px; text-align: left; margin-top: 20px; font-size: 13px; }
-        #status { font-weight: bold; color: #e2e8f0; margin: 15px 0; }
+        .btn { padding: 18px; font-size: 16px; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; width: 85%; margin: 8px 0; transition: all 0.2s; }
+        #btn-mulai { background: #22c55e; color: white; display: none; }
+        #btn-selesai { background: #ef4444; color: white; display: none; }
+        
+        /* Desain Pilihan Armada */
+        .grid-armada { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 85%; margin: 15px auto; }
+        .btn-bus { background: #1e293b; color: #94a3b8; border: 2px solid #334155; padding: 15px; font-size: 14px; font-weight: bold; border-radius: 10px; cursor: pointer; }
+        .btn-bus.terpilih { background: #10b981; color: white; border-color: #34d399; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+        
+        .info { background: #1e293b; padding: 15px; border-radius: 10px; text-align: left; margin-top: 20px; font-size: 13px; border: 1px solid #334155; }
+        #status { font-weight: bold; color: #cbd5e1; margin: 15px 0; background: #1e293b; padding: 10px; border-radius: 8px; display: inline-block; min-width: 200px; }
     </style>
 </head>
 <body>
 
     <h2>🚍 Panel Supir Bus Unila</h2>
-    <p>Kabinet Sinergi Juang</p>
+    <p style="color: #94a3b8; margin-top: -10px;">Kabinet Sinergi Juang</p>
     
-    <div id="status">Status: Belum Aktif</div>
+    <div id="status">Pilih Armada Anda Di Bawah</div>
 
-    <button id="btn-mulai" class="btn">🟢 MULAI NARIK</button>
-    <button id="btn-selesai" class="btn">🔴 SELESAI NARIK</button>
-
-    <div class="info">
-        <b>SISTEM OTOMATIS:</b><br>
-        - ID Armada tersimpan otomatis di HP ini.<br>
-        - Layar boleh mati, GPS tetap aktif.<br>
-        - Pastikan izin lokasi set ke "Selalu" (Always).
+    <!-- Menu Pilihan Tampilan Lama yang Kamu Mau -->
+    <div id="panel-pilihan">
+        <div class="grid-armada">
+            <button class="btn-bus" onclick="pilihBus(1)">Armada 1</button>
+            <button class="btn-bus" onclick="pilihBus(2)">Armada 2</button>
+            <button class="btn-bus" onclick="pilihanBus(3)" style="display:none;">Armada 3</button> <!-- Cadangan -->
+            <button class="btn-bus" onclick="pilihBus(4)">Armada 4</button>
+            <button class="btn-bus" onclick="pilihBus(5)">Armada 5</button>
+            <button class="btn-bus" onclick="pilihBus(6)">Armada 6</button>
+            <button class="btn-bus" onclick="pilihBus(7)">Armada 7</button>
+        </div>
     </div>
 
-    <!-- Script PWA & Firebase -->
+    <!-- Tombol Kontrol Utama -->
+    <button id="btn-mulai" class="btn">🟢 MULAI TRANSMISI GPS</button>
+    <button id="btn-selesai" class="btn">🔴 SELESAI & BERSIHKAN DATA</button>
+
+    <div class="info">
+        <b>SISTEM AUTO-SAVE:</b><br>
+        - Pilih nomor bus, sistem langsung mengunci di HP.<br>
+        - Jika aplikasi ter-close, cukup buka kembali dan langsung klik tombol <b>SELESAI</b> untuk reset *stuck* data.
+    </div>
+
+    <!-- Script Utama -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, set, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
@@ -48,64 +67,97 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // ====== 1. KUNCI IDENTITAS ARMADA (ANTI-STUCK) ======
-        let namaArmada = localStorage.getItem("id_armada_supir");
+        let idBusTerpilih = localStorage.getItem("save_id_bus");
+        let watchId = null;
 
-        if (!namaArmada) {
-            let inputArmada = prompt("Masukkan Nomor Armada Anda (Contoh: 4):");
-            if (inputArmada) {
-                namaArmada = "bus_" + inputArmada.trim();
-                localStorage.setItem("id_armada_supir", namaArmada);
-            } else {
-                alert("Nomor armada wajib diisi!");
-            }
+        const statusDiv = document.getElementById("status");
+        const btnMulai = document.getElementById("btn-mulai");
+        const btnSelesai = document.getElementById("btn-selesai");
+
+        // Fungsi Global untuk memilih bus (Biar bisa diakses dari tombol HTML di atas)
+        window.pilihBus = function(nomor) {
+            if (watchId) return alert("Matikan pelacakan dulu sebelum mengganti armada!");
+            
+            idBusTerpilih = "bus_" + nomor;
+            localStorage.setItem("save_id_bus", idBusTerpilih); // Kirim ke sistem save memori HP
+            
+            // Perbarui UI tombol yang aktif
+            document.querySelectorAll('.btn-bus').forEach(btn => btn.classList.remove('terpilih'));
+            event.target.classList.add('terpilih');
+            
+            statusDiv.innerText = `Terpilih: Armada ${nomor}`;
+            btnMulai.style.display = "inline-block";
+            btnSelesai.style.display = "inline-block";
         }
 
-        let watchId = null;
-        const statusDiv = document.getElementById("status");
+        // Cek apakah ada data armada yang tersimpan dari sesi sebelumnya
+        if (idBusTerpilih) {
+            statusDiv.innerText = `Melanjutkan Sesi: ${idBusTerpilih.replace('bus_', 'Armada ')}`;
+            btnMulai.style.display = "inline-block";
+            btnSelesai.style.display = "inline-block";
+            
+            // Beri warna hijau otomatis pada tombol yang tersimpan sebelumnya
+            setTimeout(() => {
+                const tombol = Array.from(document.querySelectorAll('.btn-bus'));
+                const targetText = "Armada " + idBusTerpilih.replace('bus_', '');
+                const tombolTepat = tombol.find(b => b.innerText === targetText);
+                if (tombolTepat) tombolTepat.classList.add('terpilih');
+            }, 300);
+        }
 
-        // ====== 2. TOMBOL MULAI NARIK ======
-        document.getElementById("btn-mulai").addEventListener("click", () => {
+        // AKSI TOMBOL MULAI
+        btnMulai.addEventListener("click", () => {
+            if (!idBusTerpilih) return alert("Silakan pilih nomor armada dulu!");
+
             if (navigator.geolocation) {
-                statusDiv.innerText = "Status: Memulai GPS...";
-                statusDiv.style.color = "#22c55e";
+                statusDiv.innerText = "Status: Mencari Sinyal Satelit...";
+                statusDiv.style.color = "#10b981";
 
                 watchId = navigator.geolocation.watchPosition((position) => {
                     const lat = position.coords.latitude;
                     const lng = position.coords.longitude;
 
-                    // Kirim ke Firebase sesuai ID armada yang terkunci
-                    set(ref(db, 'lokasi_bus/' + namaArmada), {
+                    set(ref(db, 'lokasi_bus/' + idBusTerpilih), {
                         lat: lat,
                         lng: lng,
                         timestamp: Date.now()
                     });
 
-                    statusDiv.innerText = `Status: Aktif (${namaArmada.replace('bus_', 'Armada ')})`;
+                    statusDiv.innerText = `Status: Live Tracking (${idBusTerpilih.replace('bus_', 'Armada ')})`;
                 }, (error) => {
-                    alert("Gagal mengambil GPS. Pastikan Izin Lokasi Aktif!");
+                    alert("GPS Eror. Harap Izinkan Lokasi di HP Anda!");
                 }, {
                     enableHighAccuracy: true,
                     maximumAge: 0
                 });
-            } else {
-                alert("HP tidak mendukung GPS.");
             }
         });
 
-        // ====== 3. TOMBOL SELESAI NARIK (ANTI-STUCK) ======
-        document.getElementById("btn-selesai").addEventListener("click", () => {
+        // AKSI TOMBOL SELESAI (SOLUSI BUG STUCK)
+        btnSelesai.addEventListener("click", () => {
+            if (!idBusTerpilih) return;
+
             if (watchId) {
                 navigator.geolocation.clearWatch(watchId);
+                watchId = null;
             }
-            
-            // Hapus data di Firebase secara bersih menggunakan ID yang tersimpan
-            remove(ref(db, 'lokasi_bus/' + namaArmada)).then(() => {
-                statusDiv.innerText = "Status: Off (Data Bersih)";
+
+            // Hapus data langsung ke cabang bus yang sedang terkunci/aktif
+            remove(ref(db, 'lokasi_bus/' + idBusTerpilih)).then(() => {
+                statusDiv.innerText = `Sukses! Data ${idBusTerpilih.replace('bus_', 'Armada ')} Dihapus`;
                 statusDiv.style.color = "#ef4444";
-                alert("Status armada berhasil dinonaktifkan secara bersih!");
-            }).catch((error) => {
-                alert("Gagal menghapus data, coba lagi.");
+                
+                // Reset visual pilihan tombol
+                document.querySelectorAll('.btn-bus').forEach(btn => btn.classList.remove('terpilih'));
+                localStorage.removeItem("save_id_bus");
+                idBusTerpilih = null;
+                
+                btnMulai.style.display = "none";
+                btnSelesai.style.display = "none";
+                
+                alert("Data di peta mahasiswa berhasil dibersihkan!");
+            }).catch(() => {
+                alert("Gagal koneksi server untuk menghapus data.");
             });
         });
     </script>
